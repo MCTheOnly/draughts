@@ -12,26 +12,19 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader'
 const boardColor1 = 0x8a8a8a
 const boardColor2 = 0xd6d6d6
 
+//MANAGER
 const manager = new THREE.LoadingManager()
 
-manager.onStart = function (url, itemsLoaded, itemsTotal) {
+manager.onProgress = function (url, loaded, total) {
+	console.log(url, loaded, total)
+}
 
-	console.log('Started loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.');
-
-};
-
-manager.onProgress = function (item, loaded, total) {
-
-	// console.log(item, loaded, total);
-
-};
-
-manager.onLoad = function () {
-	// console.log(scene.getObjectByName('sphere'))
+manager.onError = function (url) {
+	console.log('There was an error loading ' + url)
 }
 
 //TEXTURES
-const textureLoader = new THREE.TextureLoader()
+const textureLoader = new THREE.TextureLoader(manager)
 
 const earthNormal = textureLoader.load('/earth-normal.jpg')
 
@@ -87,25 +80,14 @@ renderer.toneMappingExposure = 1.25
 //RAYCASTER
 const raycaster = new THREE.Raycaster()
 const mouse = new THREE.Vector2()
-// let intersects: THREE.Intersection[]
 const objs: THREE.Mesh[] = []
 
 
 //MESH
-//MESH - plane
-const plane = new THREE.Mesh(
-	new THREE.PlaneGeometry(10, 10),
-	new THREE.MeshBasicMaterial({
-		color: 0x1a1a1a,
-		side: THREE.DoubleSide,
-		wireframe: false,
-		vertexColors: false
-	}))
-
-plane.position.set(0, 1, 0)
-plane.rotateX(-Math.PI * 0.5)
 
 let map: { [key: string]: any } = {}
+
+let selected: any = []
 
 const boxGroup = new THREE.Group()
 
@@ -147,7 +129,11 @@ const createSphere = (x: number, z: number, map: any, color: number) => {
 
 		sphere.position.set(x, 1.3, z)
 
-		sphere.name = `sphere${x}-${z}}`
+		sphere.name = `sphere${x}_${z}`
+
+		sphere.userData.hovered = false
+		sphere.userData.color = color
+		sphere.userData.destination = false
 
 		const sphereBox = new THREE.Box3().setFromObject(sphere)
 
@@ -208,13 +194,6 @@ let sphere
 //MESH - sphere
 let envmaploader = new THREE.PMREMGenerator(renderer)
 
-// console.log(map)
-
-// for (const object in map) {
-// 	createSphere(map[object].position)
-// }
-
-
 const gridHelper = new THREE.GridHelper(100, 100, 0xff0000)
 
 const sceneObjects = [
@@ -229,12 +208,6 @@ const sceneObjects = [
 ]
 
 scene.add(...sceneObjects)
-
-scene.traverse((object) => {
-	if ((object as THREE.Mesh).isMesh) {
-		objs.push(object as THREE.Mesh);
-	}
-})
 
 renderer.setSize(window.innerWidth, window.innerHeight)
 
@@ -259,35 +232,53 @@ function resetBoard() {
 window.addEventListener('mousemove', onMouseMove, false);
 
 window.addEventListener('resize', () => {
-	sizes.width = window.innerWidth;
-	sizes.height = window.innerHeight;
-	renderer.setSize(sizes.width, sizes.height);
+	sizes.width = window.innerWidth
+	sizes.height = window.innerHeight
+	renderer.setSize(sizes.width, sizes.height)
 	renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-});
+})
 
 window.addEventListener('click', clickHandler)
+
 
 function clickHandler() {
 	for (const object of objs) {
 		if (object.userData.hovered) {
-			scene.children[4].userData.destination = new THREE.Vector3(object.position.x, 1.3, object.position.z)
-			// console.log(object)
+			if (object.name.includes('square')) {
+				if (selected.length > 0) {
+					scene.getObjectByName(selected[0].name).userData.destination = new THREE.Vector3(object.position.x, 1.3, object.position.z)
+					console.log(scene.getObjectByName(object.name))
+				}
+			}
+			if (object.name.includes('sphere')) {
+				selected.push(scene.getObjectByName(object.name))
+			}
 		}
 	}
+
+}
+
+window.addEventListener('dblclick', resetSelected)
+
+function resetSelected() {
+	selected = []
 }
 
 function animate() {
 
-	if (scene.children[4].userData.destination) {
-		scene.children[4].position.lerp(scene.children[4].userData.destination, 0.1)
-		if (scene.children[4].position == scene.children[4].userData.destination) {
-			scene.children[4].userData.destination = false
-			console.log('clicked')
+	console.log(selected, scene.children)
+
+	if (selected.length > 0) {
+		if (scene.getObjectByName(selected[0].name).userData.destination) {
+			scene.getObjectByName(selected[0].name).position.lerp(scene.getObjectByName(selected[0].name).userData.destination, 0.1)
+			if (scene.getObjectByName(selected[0].name).position == scene.getObjectByName(selected[0].name).userData.destination) {
+				scene.getObjectByName(selected[0].name).userData.destination = false
+				console.log('clicked')
+			}
 		}
 	}
 
 	// sphereBox.copy(sphere.geometry.boundingBox as Box3).applyMatrix4(sphere.matrixWorld);
-	// console.log(scene.getObjectByName('sphere'))
 
 	resetBoard()
 	requestAnimationFrame(animate)
@@ -297,34 +288,34 @@ function animate() {
 function render() {
 
 	raycaster.setFromCamera(mouse, camera)
-	// console.log(scene.children)
 	const intersects = raycaster.intersectObjects(scene.children)
 
-	// console.log(intersects)
 	for (const intersect of intersects) {
-		// console.log(intersects[0])
-		if (map[intersects[0].object.name]) {
+
+		if (intersects[0].object.name.includes('square')) {
 			map[intersects[0].object.name].material.color.set(0xff0000)
 			map[intersects[0].object.name].userData.hovered = true
-			// console.log(map)
 		}
-		if (0) {
-
+		if (intersects[0].object.name.includes('sphere')) {
+			map[intersects[0].object.name].material.color.set(0xffffff)
+			map[intersects[0].object.name].userData.hovered = true
 		}
-		// console.log(intersects)
-		// if (map[intersects[0].object.name]) {
-		// 	console.log(map[intersects[0].object.name].name)
-		// }
 	}
+
+	camera.updateMatrix()
 
 	renderer.render(scene, camera)
 }
 
-window.onload = () => {
-	window.setTimeout(() => {
-		animate()
-	}, 4000)
+manager.onLoad = function () {
+	scene.traverse((object) => {
+		if ((object as THREE.Mesh).isMesh) {
+			objs.push(object as THREE.Mesh)
+		}
+	})
+
+	animate()
 }
-	// let sphere = scene.children[4]
+
 
 
