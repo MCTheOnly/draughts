@@ -119,7 +119,9 @@ const createSphere = (x: number, z: number, map: any, color: number) => {
 			normalMap: texture,
 			normalScale: new THREE.Vector2(0.15, 0.15),
 			envMap: envmap.texture,
-			sheen: 1
+			sheen: 1,
+			transparent: true,
+			opacity: 1
 		}
 
 		sphere = new THREE.Mesh(
@@ -132,8 +134,9 @@ const createSphere = (x: number, z: number, map: any, color: number) => {
 		sphere.name = `sphere${x}_${z}`
 
 		sphere.userData.hovered = false
-		sphere.userData.color = color
 		sphere.userData.destination = false
+		sphere.userData.selected = false
+		sphere.userData.color = color
 
 		const sphereBox = new THREE.Box3().setFromObject(sphere)
 
@@ -147,7 +150,7 @@ const createSphere = (x: number, z: number, map: any, color: number) => {
 for (let i = -4; i < 4; i++) {
 	for (let j = -4; j < 4; j++) {
 
-		let color = (j % 2 == 0 && i % 2 == 0) ? boardColor1 : (j % 2 != 0 && i % 2 != 0) ? boardColor1 : boardColor2
+		let color = (j % 2 == 0 && i % 2 == 0) ? boardColor2 : (j % 2 != 0 && i % 2 != 0) ? boardColor2 : boardColor1
 
 		map[`square${i}_${j}`] = new THREE.Mesh(
 			new THREE.BoxBufferGeometry(1, 0.1, 1, 4, 1, 4),
@@ -179,10 +182,13 @@ for (let i = -4; i < 4; i++) {
 
 		boxGroup.add(map[`square${i}_${j}`])
 
-		if (color == boardColor2 && ([1, 2, 3, -2, -3, -4].includes(i))) {
+		if (color == boardColor1 && ([1, 2, 3].includes(i))) {
 			if (i == 1) {
 				createSphere(i, j, map, 0x8418ca)
 			}
+		} else if (color == boardColor1 && [-2, -3, -4].includes(i)) {
+			// createSphere(i, j, map, 0x1a4fd6)
+
 		}
 	}
 }
@@ -220,7 +226,9 @@ function onMouseMove(event: MouseEvent) {
 
 function resetBoard() {
 	for (const object in map) {
+
 		map[object].material.color.set(map[object].userData.color)
+		map[object].material.opacity = 1
 		map[object].userData.hovered = false
 
 		// if (map[object].box.intersectsBox(sphereBox)) {
@@ -232,9 +240,9 @@ function resetBoard() {
 window.addEventListener('mousemove', onMouseMove, false);
 
 window.addEventListener('resize', () => {
-	sizes.width = window.innerWidth
-	sizes.height = window.innerHeight
-	renderer.setSize(sizes.width, sizes.height)
+	camera.aspect = window.innerWidth / window.innerHeight
+	camera.updateProjectionMatrix()
+	renderer.setSize(window.innerWidth, window.innerHeight)
 	renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 })
 
@@ -245,13 +253,16 @@ function clickHandler() {
 	for (const object of objs) {
 		if (object.userData.hovered) {
 			if (object.name.includes('square')) {
-				if (selected.length > 0) {
+				if (selected.length > 0 && object.userData.hovered == true) {
 					scene.getObjectByName(selected[0].name).userData.destination = new THREE.Vector3(object.position.x, 1.3, object.position.z)
-					console.log(scene.getObjectByName(object.name))
 				}
 			}
 			if (object.name.includes('sphere')) {
+
+				selected = []
+				console.log(scene.getObjectByName(object.name))
 				selected.push(scene.getObjectByName(object.name))
+
 			}
 		}
 	}
@@ -266,14 +277,17 @@ function resetSelected() {
 
 function animate() {
 
-	console.log(selected, scene.children)
-
 	if (selected.length > 0) {
-		if (scene.getObjectByName(selected[0].name).userData.destination) {
-			scene.getObjectByName(selected[0].name).position.lerp(scene.getObjectByName(selected[0].name).userData.destination, 0.1)
-			if (scene.getObjectByName(selected[0].name).position == scene.getObjectByName(selected[0].name).userData.destination) {
-				scene.getObjectByName(selected[0].name).userData.destination = false
-				console.log('clicked')
+		let target = scene.getObjectByName(selected[0].name)
+		let dest = target.userData.destination
+		// scene.getObjectByName(selected[0].name).mater
+		if (dest) {
+			target.position.lerp(dest, .1)
+			if (
+				(target.position.x > dest.x - 0.01 && target.position.x < dest.x + 0.01) &&
+				(target.position.z > dest.z - 0.01 && target.position.z < dest.z + 0.01)) {
+
+				target.userData.destination = false
 			}
 		}
 	}
@@ -293,11 +307,17 @@ function render() {
 	for (const intersect of intersects) {
 
 		if (intersects[0].object.name.includes('square')) {
-			map[intersects[0].object.name].material.color.set(0xff0000)
-			map[intersects[0].object.name].userData.hovered = true
+			if (intersects[0].object.userData.color == boardColor2) {
+				map[intersects[0].object.name].material.color.set(0xff0000)
+
+			} else if (intersects[0].object.userData.color == boardColor1) {
+				map[intersects[0].object.name].material.color.set(0x00ff00)
+				map[intersects[0].object.name].userData.hovered = true
+			}
 		}
 		if (intersects[0].object.name.includes('sphere')) {
-			map[intersects[0].object.name].material.color.set(0xffffff)
+			// map[intersects[0].object.name].material.color.set(0xffffff)
+			map[intersects[0].object.name].material.opacity = 0.5
 			map[intersects[0].object.name].userData.hovered = true
 		}
 	}
